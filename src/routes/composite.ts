@@ -276,4 +276,15 @@ router.get('/quotes/:itinerary_id', async (req: Request, res: Response) => {
   }
 })
 
+// POST /composite/quotes - Create pricing quote (proxy to PricingMS)
+router.post('/quotes', async (req: Request, res: Response) => {
+  try {
+    const quote = await pricingClient.post('/quotes', req.body)
+    res.status(201).json(quote)
+  } catch (error: any) {
+    console.error('Error creating quote:', error)
+    res.status(500).json({ error: error.message || 'Failed to create quote' })
+  }
+})
+
 export default router
