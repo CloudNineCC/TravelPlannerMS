@@ -20,11 +20,10 @@ interface Result {
 
 export async function executeInWorker(tasks: Task[]): Promise<Result[]> {
   return new Promise((resolve, reject) => {
-    // Use the compiled worker.js from dist or the source worker.js
-    const workerPath = process.env.NODE_ENV === 'production' 
+    const workerPath = process.env.NODE_ENV === 'production'
       ? join(__dirname, 'worker.js')
       : join(__dirname, 'worker.js')
-    
+
     const worker = new Worker(workerPath, {
       workerData: { tasks }
     })
@@ -46,4 +45,3 @@ export async function executeInWorker(tasks: Task[]): Promise<Result[]> {
     })
   })
 }
-

@@ -4,7 +4,6 @@ import { executeInWorker } from '../workers/parallel-processor.js'
 
 const router = Router()
 
-// Helper: Validate city exists in DestinationsMS
 async function validateCityExists(cityId: string): Promise<{ valid: boolean; error?: string }> {
   try {
     await destinationsClient.get(`/cities/${cityId}`)
@@ -13,15 +12,13 @@ async function validateCityExists(cityId: string): Promise<{ valid: boolean; err
     if (error.message.includes('404')) {
       return { valid: false, error: `City with ID '${cityId}' does not exist` }
     }
-    throw error // Re-throw non-404 errors
+    throw error
   }
 }
 
-// Helper: Validate lodging class exists in PricingMS
 async function validateLodgingClass(lodgingClass: string): Promise<{ valid: boolean; error?: string }> {
   try {
     const classes: any[] = await pricingClient.get('/lodging-classes')
-    // Handle both plain string array and object array
     const exists = classes.some((lc: any) =>
       typeof lc === 'string' ? lc === lodgingClass : lc.class_name === lodgingClass
     )
@@ -34,7 +31,6 @@ async function validateLodgingClass(lodgingClass: string): Promise<{ valid: bool
   }
 }
 
-// Helper: Validate segment data
 async function validateSegment(segment: any): Promise<{ valid: boolean; errors: string[] }> {
   const errors: string[] = []
 
@@ -64,7 +60,6 @@ async function validateSegment(segment: any): Promise<{ valid: boolean; errors: 
     errors.push('Segment missing end_date')
   }
 
-  // Validate date range
   if (segment.start_date && segment.end_date) {
     const start = new Date(segment.start_date)
     const end = new Date(segment.end_date)
@@ -76,7 +71,6 @@ async function validateSegment(segment: any): Promise<{ valid: boolean; errors: 
   return { valid: errors.length === 0, errors }
 }
 
-// GET /composite/itineraries/:id - Get full itinerary with enriched data
 router.get('/itineraries/:id', async (req: Request, res: Response) => {
   try {
     const itineraryId = req.params.id
@@ -84,14 +78,13 @@ router.get('/itineraries/:id', async (req: Request, res: Response) => {
     const DESTINATIONS_URL = process.env.DESTINATIONS_MS_URL || 'http://localhost:3001'
     const PRICING_URL = process.env.PRICING_MS_URL || 'http://localhost:3002'
 
-    // Fetch itinerary details and segments in parallel using worker threads
     const initialTasks = [
       { type: 'fetch' as const, url: `${ITINERARIES_URL}/itineraries/${itineraryId}` },
       { type: 'fetch' as const, url: `${ITINERARIES_URL}/itineraries/${itineraryId}/segments` }
     ]
 
     const initialResults = await executeInWorker(initialTasks)
-    
+
     if (!initialResults[0].success || !initialResults[1].success) {
       throw new Error('Failed to fetch itinerary or segments')
     }
@@ -99,19 +92,17 @@ router.get('/itineraries/:id', async (req: Request, res: Response) => {
     const itinerary = initialResults[0].data
     const segments = initialResults[1].data
 
-    // Enrich segments with city and pricing data using worker threads
     const enrichmentTasks = segments.flatMap((segment: any) => [
       { type: 'fetch' as const, url: `${DESTINATIONS_URL}/cities/${segment.city_id}` },
       { type: 'fetch' as const, url: `${PRICING_URL}/rates?city_id=${segment.city_id}&lodging_class=${segment.lodging_class}` }
     ])
 
     const enrichmentResults = await executeInWorker(enrichmentTasks)
-    
-    // Process results to enrich segments
+
     const enrichedSegments = segments.map((segment: any, index: number) => {
       const cityResult = enrichmentResults[index * 2]
       const ratesResult = enrichmentResults[index * 2 + 1]
-      
+
       const city = cityResult.success ? cityResult.data : null
       const rates = ratesResult.success ? ratesResult.data : []
 
@@ -134,20 +125,16 @@ router.get('/itineraries/:id', async (req: Request, res: Response) => {
   }
 })
 
-// GET /composite/destinations - Get all cities with seasonal info
 router.get('/destinations', async (_req: Request, res: Response) => {
   try {
-    // Fetch cities and seasons in parallel (with limit=100 to get all cities)
     const [citiesResponse, seasonsResponse]: any[] = await Promise.all([
       destinationsClient.get('/cities?limit=100'),
       destinationsClient.get('/seasons?limit=100'),
     ])
 
-    // Extract data from paginated responses
     const cities = citiesResponse.data || citiesResponse
     const seasons = seasonsResponse.data || seasonsResponse
 
-    // Group seasons by city_id
     const seasonsByCity = seasons.reduce((acc: any, season: any) => {
       if (!acc[season.city_id]) {
         acc[season.city_id] = []
@@ -156,7 +143,6 @@ router.get('/destinations', async (_req: Request, res: Response) => {
       return acc
     }, {})
 
-    // Enrich cities with their seasons
     const enrichedCities = cities.map((city: any) => ({
       ...city,
       seasons: seasonsByCity[city.id] || [],
@@ -169,7 +155,6 @@ router.get('/destinations', async (_req: Request, res: Response) => {
   }
 })
 
-// POST /composite/itineraries - Create itinerary with segments (with FK validation)
 router.post('/itineraries', async (req: Request, res: Response) => {
   try {
     const { itinerary, segments } = req.body
@@ -178,7 +163,6 @@ router.post('/itineraries', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing itinerary data' })
     }
 
-    // Validate all segments before creating anything
     if (segments && Array.isArray(segments) && segments.length > 0) {
       const validationResults = await Promise.all(
         segments.map((segment: any, index: number) =>
@@ -198,10 +182,8 @@ router.post('/itineraries', async (req: Request, res: Response) => {
       }
     }
 
-    // Create the itinerary first
     const createdItinerary: any = await itinerariesClient.post('/itineraries', itinerary)
 
-    // Create segments if provided
     let createdSegments: any[] = []
     if (segments && Array.isArray(segments) && segments.length > 0) {
       createdSegments = await Promise.all(
@@ -221,19 +203,16 @@ router.post('/itineraries', async (req: Request, res: Response) => {
   }
 })
 
-// GET /composite/quotes/:itinerary_id - Get pricing quotes for an itinerary
 router.get('/quotes/:itinerary_id', async (req: Request, res: Response) => {
   try {
     const itineraryId = req.params.itinerary_id
 
-    // Fetch segments
     const segments: any[] = await itinerariesClient.get(`/itineraries/${itineraryId}/segments`)
 
     if (segments.length === 0) {
       return res.json({ total: 0, segments: [] })
     }
 
-    // Fetch city info and rates for each segment in parallel
     const segmentQuotes = await Promise.all(
       segments.map(async (segment: any) => {
         const [city, rates]: any[] = await Promise.all([
@@ -241,12 +220,10 @@ router.get('/quotes/:itinerary_id', async (req: Request, res: Response) => {
           pricingClient.get(`/rates?city_id=${segment.city_id}&lodging_class=${segment.lodging_class}`),
         ])
 
-        // Calculate nights
         const startDate = new Date(segment.start_date)
         const endDate = new Date(segment.end_date)
         const nights = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
 
-        // Get the rate (if available)
         const rate = Array.isArray(rates) && rates.length > 0 ? rates[0] : null
         const pricePerNight = rate ? parseFloat(rate.price_per_night) : 0
         const segmentTotal = pricePerNight * nights
@@ -276,7 +253,6 @@ router.get('/quotes/:itinerary_id', async (req: Request, res: Response) => {
   }
 })
 
-// POST /composite/quotes - Create pricing quote (proxy to PricingMS)
 router.post('/quotes', async (req: Request, res: Response) => {
   try {
     const quote = await pricingClient.post('/quotes', req.body)

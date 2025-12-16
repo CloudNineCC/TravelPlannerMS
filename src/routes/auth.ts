@@ -7,7 +7,6 @@ const router = Router()
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim()
 const client = new OAuth2Client(GOOGLE_CLIENT_ID)
 
-// POST /auth/google-login
 router.post('/google-login', async (req: Request, res: Response) => {
   try {
     const { credential } = req.body
@@ -16,7 +15,6 @@ router.post('/google-login', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing credential' })
     }
 
-    // Decode token to see what's inside (for debugging)
     const parts = credential.split('.')
     const payload_preview = JSON.parse(Buffer.from(parts[1], 'base64').toString())
     console.log('=== OAUTH DEBUG ===')
@@ -25,7 +23,6 @@ router.post('/google-login', async (req: Request, res: Response) => {
     console.log('Match:', payload_preview.aud === GOOGLE_CLIENT_ID)
     console.log('===================')
 
-    // Verify Google ID token
     const ticket = await client.verifyIdToken({
       idToken: credential,
       audience: GOOGLE_CLIENT_ID
@@ -36,7 +33,6 @@ router.post('/google-login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid token' })
     }
 
-    // Extract user info from Google token
     const userInfo: UserInfo = {
       id: payload.sub,
       email: payload.email || '',
@@ -44,7 +40,6 @@ router.post('/google-login', async (req: Request, res: Response) => {
       picture: payload.picture
     }
 
-    // Generate JWT
     const token = generateJWT(userInfo)
 
     res.json({
@@ -57,7 +52,6 @@ router.post('/google-login', async (req: Request, res: Response) => {
   }
 })
 
-// POST /auth/verify
 router.post('/verify', async (req: Request, res: Response) => {
   try {
     const authHeader = req.headers.authorization

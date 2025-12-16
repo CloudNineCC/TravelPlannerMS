@@ -1,4 +1,3 @@
-// Simple HTTP client for calling other microservices
 export class HttpClient {
   private baseUrl: string
 

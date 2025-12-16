@@ -18,14 +18,14 @@ async function executeTask(task: Task): Promise<Result> {
     const options: RequestInit = {
       method: task.method || 'GET'
     }
-    
+
     if (task.body) {
       options.headers = { 'Content-Type': 'application/json' }
       options.body = JSON.stringify(task.body)
     }
 
     const response = await fetch(task.url, options)
-    
+
     if (!response.ok) {
       return {
         success: false,
@@ -48,12 +48,10 @@ async function executeTask(task: Task): Promise<Result> {
 
 async function processTasks() {
   const tasks: Task[] = workerData.tasks
-  
+
   try {
-    // Execute all tasks in parallel
     const results = await Promise.all(tasks.map(executeTask))
-    
-    // Send results back to main thread
+
     if (parentPort) {
       parentPort.postMessage(results)
     }
@@ -68,4 +66,3 @@ async function processTasks() {
 }
 
 processTasks()
-
