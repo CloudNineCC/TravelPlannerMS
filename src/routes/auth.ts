@@ -17,11 +17,6 @@ router.post('/google-login', async (req: Request, res: Response) => {
 
     const parts = credential.split('.')
     const payload_preview = JSON.parse(Buffer.from(parts[1], 'base64').toString())
-    console.log('=== OAUTH DEBUG ===')
-    console.log('Token audience (aud):', payload_preview.aud)
-    console.log('Expected Client ID:', GOOGLE_CLIENT_ID)
-    console.log('Match:', payload_preview.aud === GOOGLE_CLIENT_ID)
-    console.log('===================')
 
     const ticket = await client.verifyIdToken({
       idToken: credential,
